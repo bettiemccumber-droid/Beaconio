@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import ArticleCard from '../components/ArticleCard';
 import SocialWidget from '../components/SocialWidget';
 import { articles, categories } from '../data/articles';
+import { fetchPublishedList } from '../lib/published';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { articleCategories, articleHaystack, byNewest } from '../utils';
 
@@ -22,10 +23,36 @@ export default function Blog() {
   const sort = params.get('sort') === 'oldest' ? 'oldest' : 'newest';
   const page = Math.max(1, Number.parseInt(params.get('page') || '1', 10) || 1);
   const [view, setView] = useState('grid');
+  const [extra, setExtra] = useState([]);
+
+  useEffect(() => {
+    fetchPublishedList().then((posts) => {
+      const known = new Set(articles.map((item) => item.slug));
+      setExtra(
+        posts
+          .filter((post) => post?.slug && !known.has(post.slug))
+          .map((post) => ({
+            slug: post.slug,
+            title: post.title,
+            excerpt: post.excerpt || '',
+            standfirst: post.excerpt || '',
+            date: post.date,
+            categories: [post.category || 'Reviews'],
+            image: post.image || '',
+            imageAlt: post.title,
+            author: post.author || 'Beaconio',
+            tags: Array.isArray(post.keywords) ? post.keywords : [],
+            sections: [],
+            readMinutes: post.readTime || 1,
+            role: 'Editor',
+          })),
+      );
+    });
+  }, []);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    let list = byNewest(articles);
+    let list = byNewest([...extra, ...articles]);
     if (category !== 'All') {
       list = list.filter((article) => articleCategories(article).includes(category));
     }
@@ -36,7 +63,7 @@ export default function Blog() {
       list = [...list].reverse();
     }
     return list;
-  }, [query, category, sort]);
+  }, [query, category, sort, extra]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);

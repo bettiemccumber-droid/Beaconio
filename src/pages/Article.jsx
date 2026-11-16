@@ -5,6 +5,7 @@ import ArticleCard from '../components/ArticleCard';
 import SocialLinks from '../components/SocialLinks';
 import NotFound from './NotFound';
 import { getArticleBySlug, articles } from '../data/articles';
+import { fetchPublishedArticle } from '../lib/published';
 import { getProductBySlug } from '../data/products';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { articleCategories, formatDate, formatPrice, relatedArticles } from '../utils';
@@ -12,16 +13,52 @@ import { articleCategories, formatDate, formatPrice, relatedArticles } from '../
 /**
  * Full story, with a linked product or platform when the piece recommends one.
  */
+function publishedBeacon(post) {
+  return {
+    slug: post.slug,
+    title: post.title,
+    standfirst: post.excerpt || '',
+    excerpt: post.excerpt || '',
+    date: post.date,
+    categories: [post.category || 'Reviews'],
+    image: post.image || '',
+    imageAlt: post.title,
+    author: post.author || 'Beaconio',
+    role: 'Editor',
+    readMinutes: post.readTime || 1,
+    tags: Array.isArray(post.keywords) ? post.keywords : [],
+    sections: [],
+    layout: 'feature',
+    bodyHtml: post.bodyHtml || '',
+  };
+}
+
 export default function Article() {
   const { slug } = useParams();
-  const article = getArticleBySlug(slug);
-  usePageTitle(article ? article.title : 'Story not found');
+  const local = getArticleBySlug(slug);
+  const [remote, setRemote] = useState(null);
+  const [checked, setChecked] = useState(Boolean(local));
+  const article = local || (remote ? publishedBeacon(remote) : null);
+  usePageTitle(article ? article.title : checked ? 'Story not found' : 'Beaconio');
   const [progress, setProgress] = useState(0);
   const [copied, setCopied] = useState(false);
   const [typeSize, setTypeSize] = useState('m');
   const [wide, setWide] = useState(false);
   const [saved, setSaved] = useState(false);
   const [tocOpen, setTocOpen] = useState(true);
+
+  useEffect(() => {
+    if (local) return undefined;
+    let cancel = false;
+    fetchPublishedArticle(slug).then((post) => {
+      if (cancel) return;
+      setRemote(post);
+      setChecked(true);
+    });
+    return () => {
+      cancel = true;
+    };
+  }, [local, slug]);
 
   useEffect(() => {
     /**
@@ -45,7 +82,7 @@ export default function Article() {
     setSaved(current.includes(article.slug));
   }, [article]);
 
-  if (!article) return <NotFound />;
+  if (!article) return checked ? <NotFound /> : null;
 
   const names = articleCategories(article);
   const contents = article.sections.filter((block) => block.type === 'h2');
@@ -82,7 +119,7 @@ export default function Article() {
     <article className={`page article-page article-page--${article.layout || 'feature'}${wide ? ' is-wide' : ''}`}>
       <div className="progress" style={{ width: `${progress}%` }} aria-hidden="true" />
       <header className="article-hero">
-        <img src={article.image} alt={article.imageAlt} />
+        {article.image ? <img src={article.image} alt={article.imageAlt} /> : null}
         <div className="wrap article-hero__panel">
           <p className="story-card__meta">
             <span>
@@ -139,7 +176,11 @@ export default function Article() {
               ))}
             </nav>
           ) : null}
-          <ArticleBody sections={article.sections} />
+          {article.bodyHtml ? (
+            <div dangerouslySetInnerHTML={{ __html: article.bodyHtml }} />
+          ) : (
+            <ArticleBody sections={article.sections} />
+          )}
 
           {article.verdict ? (
             <aside className="verdict">

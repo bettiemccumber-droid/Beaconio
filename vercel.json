@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/posts/index.js": {
+      "includeFiles": "src/data/articles.js"
+    }
+  }
+}
